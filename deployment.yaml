@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: uptime-kuma
+
+---
+# Persistent storage for uptime-kuma
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uptime-kuma-pvc
+  namespace: uptime-kuma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# Persistent storage for signal-cli
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: signalcli-pvc
+  namespace: uptime-kuma
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uptime-kuma
+  namespace: uptime-kuma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: uptime-kuma
+  template:
+    metadata:
+      labels:
+        app: uptime-kuma
+    spec:
+      volumes:
+        - name: kuma-data
+          persistentVolumeClaim:
+            claimName: uptime-kuma-pvc
+        - name: signalcli-data
+          persistentVolumeClaim:
+            claimName: signalcli-pvc
+      containers:
+        - name: uptime-kuma
+          image: louislam/uptime-kuma:latest
+          ports:
+            - containerPort: 3001
+          volumeMounts:
+            - name: kuma-data
+              mountPath: /app/data
+        - name: signal-cli
+          image: bbernhard/signal-cli-rest-api:latest
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: signalcli-data
+              mountPath: /home/.local/share/signal-cli
+          env:
+            - name: MODE
+              value: "native"
+          # You can set more environment variables as needed
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: uptime-kuma-service
+  namespace: uptime-kuma
+spec:
+  type: NodePort
+  ports:
+    - port: 3001
+      targetPort: 3001
+      protocol: TCP
+      nodePort: 32001
+  selector:
+    app: uptime-kuma
